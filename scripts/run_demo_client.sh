@@ -5,4 +5,12 @@
 # commands should still get through (be replicated) once the new leader becomes
 # stable.
 
-./examples/hotstuff-client --idx 0 --iter -1 --max-async 4
+# Run the client
+./examples/hotstuff-client --idx 0 --iter -1 --max-async 4 2> log &
+pid=$!
+
+# Wait 30 seconds
+sleep 30
+
+# Kill the client
+kill -INT $pid
