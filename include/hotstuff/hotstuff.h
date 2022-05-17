@@ -21,6 +21,7 @@
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
 
 #include "salticidae/util.h"
 #include "salticidae/network.h"
@@ -143,12 +144,15 @@ class HotStuffBase: public HotStuffCore {
     salticidae::ThreadCall tcall;
     VeriPool vpool;
     std::vector<PeerId> peers;
+    std::vector<PeerId> stream_peers;
+    std::map<PeerId, PeerId> _convert_peers;
 
     private:
     /** whether libevent handle is owned by itself */
     bool ec_loop;
     /** network stack */
     Net pn;
+    Net _streamer;
     std::unordered_set<uint256_t> valid_tls_certs;
 #ifdef HOTSTUFF_BLK_PROFILE
     BlockProfiler blk_profiler;
