@@ -88,9 +88,11 @@ class ReplicaConfig {
 };
 
 class Block;
+class IntBlock;
 class HotStuffCore;
 
 using block_t = salticidae::ArcObj<Block>;
+using iblock_t = salticidae::ArcObj<IntBlock>;
 
 class Command: public Serializable {
     friend HotStuffCore;
@@ -205,6 +207,103 @@ class Block {
     operator std::string () const {
         DataStream s;
         s << "<block "
+          << "id="  << get_hex10(hash) << " "
+          << "height=" << std::to_string(height) << " "
+          << "parent=" << get_hex10(parent_hashes[0]) << " "
+          << "qc_ref=" << (qc_ref ? get_hex10(qc_ref->get_hash()) : "null") << ">";
+        return s;
+    }
+};
+
+class IntBlock {
+    friend HotStuffCore;
+    std::vector<uint256_t> parent_hashes;
+    int n_cmds;
+    quorum_cert_bt qc;
+    bytearray_t extra;
+
+    // the following fields can be derived from above
+    uint256_t hash;
+    std::vector<block_t> parents;
+    block_t qc_ref;
+    quorum_cert_bt self_qc;
+    uint32_t height;
+    bool delivered;
+    int8_t decision;
+
+    std::unordered_set<ReplicaID> voted;
+
+    public:
+    IntBlock():
+        qc(nullptr),
+        qc_ref(nullptr),
+        self_qc(nullptr), height(0),
+        delivered(false), decision(0) {}
+
+    IntBlock(bool delivered, int8_t decision):
+        qc(new QuorumCertDummy()),
+        hash(salticidae::get_hash(*this)),
+        qc_ref(nullptr),
+        self_qc(nullptr), height(0),
+        delivered(delivered), decision(decision) {}
+
+    IntBlock(const std::vector<block_t> &parents,
+        const int &n_cmds,
+        quorum_cert_bt &&qc,
+        bytearray_t &&extra,
+        uint32_t height,
+        const block_t &qc_ref,
+        quorum_cert_bt &&self_qc,
+        int8_t decision = 0):
+            parent_hashes(get_hashes(parents)),
+            n_cmds(n_cmds),
+            qc(std::move(qc)),
+            extra(std::move(extra)),
+            hash(salticidae::get_hash(*this)),
+            parents(parents),
+            qc_ref(qc_ref),
+            self_qc(std::move(self_qc)),
+            height(height),
+            delivered(0),
+            decision(decision) {}
+
+    void serialize(DataStream &s) const;
+
+    void unserialize(DataStream &s, HotStuffCore *hsc);
+
+    const int &get_n_cmds() const {
+        return n_cmds;
+    }
+
+    const std::vector<block_t> &get_parents() const {
+        return parents;
+    }
+
+    const std::vector<uint256_t> &get_parent_hashes() const {
+        return parent_hashes;
+    }
+
+    const uint256_t &get_hash() const { return hash; }
+
+    bool verify(const HotStuffCore *hsc) const;
+
+    promise_t verify(const HotStuffCore *hsc, VeriPool &vpool) const;
+
+    int8_t get_decision() const { return decision; }
+
+    bool is_delivered() const { return delivered; }
+
+    uint32_t get_height() const { return height; }
+
+    quorum_cert_bt &get_qc() { return qc; }
+
+    block_t &get_qc_ref() { return qc_ref; }
+
+    bytearray_t &get_extra() { return extra; }
+
+    operator std::string () const {
+        DataStream s;
+        s << "<IntBlock "
           << "id="  << get_hex10(hash) << " "
           << "height=" << std::to_string(height) << " "
           << "parent=" << get_hex10(parent_hashes[0]) << " "

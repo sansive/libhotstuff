@@ -75,6 +75,24 @@ void MsgRespBlock::postponed_parse(HotStuffCore *hsc) {
     }
 }
 
+const opcode_t MsgCmd::opcode;
+MsgCmd::MsgCmd(const uint256_t &cmd) {
+    serialized << cmd;
+}
+
+MsgCmd::MsgCmd(DataStream &&s) {
+    s >> cmd;
+}
+
+const opcode_t MsgRespSreamCmd::opcode;
+MsgRespSreamCmd::MsgRespSreamCmd(const uint256_t &cmd) {
+    serialized << cmd;
+}
+
+MsgRespSreamCmd::MsgRespSreamCmd(DataStream &&s) {
+    s >> cmd;
+}
+
 // TODO: improve this function
 void HotStuffBase::exec_command(uint256_t cmd_hash, commit_cb_t callback) {
     cmd_pending.enqueue(std::make_pair(cmd_hash, callback));
@@ -167,6 +185,7 @@ promise_t HotStuffBase::async_fetch_blk(const uint256_t &blk_hash,
 
 promise_t HotStuffBase::async_deliver_blk(const uint256_t &blk_hash,
                                         const PeerId &replica) {
+
     if (storage->is_blk_delivered(blk_hash))
         return promise_t([this, &blk_hash](promise_t pm) {
             pm.resolve(storage->find_blk(blk_hash));
@@ -176,6 +195,7 @@ promise_t HotStuffBase::async_deliver_blk(const uint256_t &blk_hash,
         return static_cast<promise_t &>(it->second);
     BlockDeliveryContext pm{[](promise_t){}};
     it = blk_delivery_waiting.insert(std::make_pair(blk_hash, pm)).first;
+
     /* otherwise the on_deliver_batch will resolve */
     async_fetch_blk(blk_hash, &replica).then([this, replica](block_t blk) {
         /* qc_ref should be fetched */
@@ -187,6 +207,7 @@ promise_t HotStuffBase::async_deliver_blk(const uint256_t &blk_hash,
         else
             pms.push_back(blk->verify(this, vpool));
         pms.push_back(async_fetch_blk(qc->get_obj_hash(), &replica));
+
         /* the parents should be delivered */
         for (const auto &phash: blk->get_parent_hashes())
             pms.push_back(async_deliver_blk(phash, replica));
@@ -199,12 +220,27 @@ promise_t HotStuffBase::async_deliver_blk(const uint256_t &blk_hash,
     return static_cast<promise_t &>(pm);
 }
 
+void HotStuffBase::cmd_handler(MsgCmd &&msg, const Net::conn_t &conn) {
+    const PeerId &peer = conn->get_peer_id();
+    if (peer.is_null()) return;
+
+    auto &cmd = msg.cmd;
+    on_receive_cmd(cmd);
+}
+
+void HotStuffBase::resp_cmd_handler(MsgRespSreamCmd &&msg, const Net::conn_t &conn) {
+    const PeerId &peer = conn->get_peer_id();
+    if (peer.is_null()) return;
+    cmds_peers[peer] = cmds_peers[peer] + 1;
+}
+
+
 void HotStuffBase::propose_handler(MsgPropose &&msg, const Net::conn_t &conn) {
     const PeerId &peer = conn->get_peer_id();
     if (peer.is_null()) return;
     msg.postponed_parse(this);
     auto &prop = msg.proposal;
-    block_t blk = prop.blk;
+    iblock_t blk = prop.blk;
     if (!blk) return;
     if (peer != get_config().get_peer_id(prop.proposer))
     {
@@ -212,7 +248,7 @@ void HotStuffBase::propose_handler(MsgPropose &&msg, const Net::conn_t &conn) {
         return;
     }
     promise::all(std::vector<promise_t>{
-        async_deliver_blk(blk->get_hash(), _convert_peers[peer])
+        async_deliver_blk(blk->get_hash(), peer)
     }).then([this, prop = std::move(prop)]() {
         on_receive_proposal(prop);
     });
@@ -368,7 +404,9 @@ HotStuffBase::HotStuffBase(uint32_t blk_size,
         part_delivery_time_max(0)
 {
     /* register the handlers for msg from replicas */
-    _streamer.reg_handler(salticidae::generic_bind(&HotStuffBase::propose_handler, this, _1, _2));
+    _streamer.reg_handler(salticidae::generic_bind(&HotStuffBase::cmd_handler, this, _1, _2));
+    _streamer.reg_handler(salticidae::generic_bind(&HotStuffBase::resp_cmd_handler, this, _1, _2));
+    pn.reg_handler(salticidae::generic_bind(&HotStuffBase::propose_handler, this, _1, _2));
     pn.reg_handler(salticidae::generic_bind(&HotStuffBase::vote_handler, this, _1, _2));
     pn.reg_handler(salticidae::generic_bind(&HotStuffBase::req_blk_handler, this, _1, _2));
     pn.reg_handler(salticidae::generic_bind(&HotStuffBase::resp_blk_handler, this, _1, _2));
@@ -390,9 +428,14 @@ HotStuffBase::HotStuffBase(uint32_t blk_size,
 
 void HotStuffBase::do_broadcast_proposal(const Proposal &prop) {
     //MsgPropose prop_msg(prop);
-    _streamer.multicast_msg(MsgPropose(prop), stream_peers);
+    pn.multicast_msg(MsgPropose(prop), peers);
     //for (const auto &replica: peers)
     //    pn.send_msg(prop_msg, replica);
+}
+
+void HotStuffBase::do_resp_cmd(const uint256_t cmd) {
+    ReplicaID proposer = pmaker->get_proposer();
+    _streamer.send_msg(MsgRespSreamCmd(cmd), get_config().get_peer_id(proposer));
 }
 
 void HotStuffBase::do_vote(ReplicaID last_proposer, const Vote &vote) {
@@ -456,6 +499,8 @@ void HotStuffBase::start(
 		    _streamer.add_peer(stream_peer);
             _streamer.set_peer_addr(stream_peer, stream_addr);
             _streamer.conn_peer(stream_peer);
+
+            cmds_peers[stream_peer] = 0;
         }
     }
 
@@ -470,6 +515,7 @@ void HotStuffBase::start(
 
     cmd_pending.reg_handler(ec, [this](cmd_queue_t &q) {
         std::pair<uint256_t, commit_cb_t> e;
+
         while (q.try_dequeue(e)) {
             ReplicaID proposer = pmaker->get_proposer();
 
@@ -482,21 +528,23 @@ void HotStuffBase::start(
 
             if (proposer != get_id()) continue;
 
-            cmd_pending_buffer.push(cmd_hash);
-            if (cmd_pending_buffer.size() >= blk_size) {
-                std::vector<uint256_t> cmds;
-                for (uint32_t i = 0; i < blk_size; i++) {
-                    cmds.push_back(cmd_pending_buffer.front());
-                    cmd_pending_buffer.pop();
+            // Streaming of cmds
+            _streamer.multicast_msg(MsgCmd(cmd_hash), stream_peers);
+
+            // Proposal
+            pmaker->beat().then([this, cmd_hash](ReplicaID proposer) {
+                if (proposer == get_id()) {
+                    int n_cmds = cmds_peers[0];
+                    for (auto stream_peer: stream_peers) {
+                        if(cmds_peers[stream_peer] < n_cmds)
+                            n_cmds = cmds_peers[stream_peer];
+                    }
+
+                    on_propose(n_cmds, pmaker->get_parents());
                 }
+            });
 
-                pmaker->beat().then([this, cmds = std::move(cmds)](ReplicaID proposer) {
-                    if (proposer == get_id())
-                        on_propose(cmds, pmaker->get_parents());
-                });
-
-                return true;
-            }
+            return true;
         }
 
         return false;

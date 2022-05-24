@@ -68,4 +68,45 @@ promise_t Block::verify(const HotStuffCore *hsc, VeriPool &vpool) const {
     return qc->verify(hsc->get_config(), vpool);
 }
 
+// INTBLOCK
+void IntBlock::serialize(DataStream &s) const {
+    s << htole((uint32_t)parent_hashes.size());
+    for (const auto &hash: parent_hashes)
+        s << hash;
+    s << n_cmds << *qc << htole((uint32_t)extra.size()) << extra;
+}
+
+void IntBlock::unserialize(DataStream &s, HotStuffCore *hsc) {
+    uint32_t n;
+    s >> n;
+    n = letoh(n);
+    parent_hashes.resize(n);
+    for (auto &hash: parent_hashes)
+        s >> hash;
+    s >> n_cmds;
+    qc = hsc->parse_quorum_cert(s);
+    s >> n;
+    n = letoh(n);
+    if (n == 0)
+        extra.clear();
+    else
+    {
+        auto base = s.get_data_inplace(n);
+        extra = bytearray_t(base, base + n);
+    }
+    this->hash = salticidae::get_hash(*this);
+}
+
+bool IntBlock::verify(const HotStuffCore *hsc) const {
+    if (qc->get_obj_hash() == hsc->get_genesis()->get_hash())
+        return true;
+    return qc->verify(hsc->get_config());
+}
+
+promise_t IntBlock::verify(const HotStuffCore *hsc, VeriPool &vpool) const {
+    if (qc->get_obj_hash() == hsc->get_genesis()->get_hash())
+        return promise_t([](promise_t &pm) { pm.resolve(true); });
+    return qc->verify(hsc->get_config(), vpool);
+}
+
 }

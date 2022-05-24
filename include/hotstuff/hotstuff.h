@@ -69,14 +69,32 @@ struct MsgReqBlock {
     MsgReqBlock(DataStream &&s);
 };
 
-
 struct MsgRespBlock {
     static const opcode_t opcode = 0x3;
     DataStream serialized;
     std::vector<block_t> blks;
+
     MsgRespBlock(const std::vector<block_t> &blks);
     MsgRespBlock(DataStream &&s): serialized(std::move(s)) {}
     void postponed_parse(HotStuffCore *hsc);
+};
+
+struct MsgCmd {
+    static const opcode_t opcode = 0x4;
+    DataStream serialized;
+    uint256_t cmd;
+    
+    MsgCmd(const uint256_t &cmd);
+    MsgCmd(DataStream &&s);
+};
+
+struct MsgRespSreamCmd {
+    static const opcode_t opcode = 0x5;
+    DataStream serialized;
+    uint256_t cmd;
+    
+    MsgRespSreamCmd(const uint256_t &cmd);
+    MsgRespSreamCmd(DataStream &&s);
 };
 
 using promise::promise_t;
@@ -146,6 +164,7 @@ class HotStuffBase: public HotStuffCore {
     std::vector<PeerId> peers;
     std::vector<PeerId> stream_peers;
     std::map<PeerId, PeerId> _convert_peers;
+    std::map<PeerId, int> cmds_peers;
 
     private:
     /** whether libevent handle is owned by itself */
@@ -164,7 +183,6 @@ class HotStuffBase: public HotStuffCore {
     std::unordered_map<const uint256_t, commit_cb_t> decision_waiting;
     using cmd_queue_t = salticidae::MPSCQueueEventDriven<std::pair<uint256_t, commit_cb_t>>;
     cmd_queue_t cmd_pending;
-    std::queue<uint256_t> cmd_pending_buffer;
 
     /* statistics */
     uint64_t fetched;
@@ -186,6 +204,10 @@ class HotStuffBase: public HotStuffCore {
     void on_fetch_blk(const block_t &blk);
     bool on_deliver_blk(const block_t &blk);
 
+    /** deliver streaming message: <cmd> */
+    inline void cmd_handler(MsgCmd &&, const Net::conn_t &);
+    /** deliver streaming message: <ack cmd> */
+    inline void resp_cmd_handler(MsgRespSreamCmd &&, const Net::conn_t &);
     /** deliver consensus message: <propose> */
     inline void propose_handler(MsgPropose &&, const Net::conn_t &);
     /** deliver consensus message: <vote> */
@@ -199,6 +221,7 @@ class HotStuffBase: public HotStuffCore {
 
     void do_broadcast_proposal(const Proposal &) override;
     void do_vote(ReplicaID, const Vote &) override;
+    void do_resp_cmd(const uint256_t cmd) override;
     void do_decide(Finality &&) override;
     void do_consensus(const block_t &blk) override;
 
