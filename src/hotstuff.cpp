@@ -75,7 +75,7 @@ void MsgRespBlock::postponed_parse(HotStuffCore *hsc) {
     }
 }
 
-/*const opcode_t MsgCmd::opcode;
+const opcode_t MsgCmd::opcode;
 MsgCmd::MsgCmd(const uint256_t &cmd) {
     serialized << cmd;
 }
@@ -91,7 +91,7 @@ MsgRespSreamCmd::MsgRespSreamCmd(const uint256_t &cmd) {
 
 MsgRespSreamCmd::MsgRespSreamCmd(DataStream &&s) {
     s >> cmd;
-}*/
+}
 
 // TODO: improve this function
 void HotStuffBase::exec_command(uint256_t cmd_hash, commit_cb_t callback) {
@@ -220,7 +220,7 @@ promise_t HotStuffBase::async_deliver_blk(const uint256_t &blk_hash,
     return static_cast<promise_t &>(pm);
 }
 
-/*void HotStuffBase::cmd_handler(MsgCmd &&msg, const Net::conn_t &conn) {
+void HotStuffBase::cmd_handler(MsgCmd &&msg, const Net::conn_t &conn) {
     const PeerId &peer = conn->get_peer_id();
     if (peer.is_null()) return;
 
@@ -232,7 +232,7 @@ void HotStuffBase::resp_cmd_handler(MsgRespSreamCmd &&msg, const Net::conn_t &co
     const PeerId &peer = conn->get_peer_id();
     if (peer.is_null()) return;
     cmds_peers[peer] = cmds_peers[peer] + 1;
-}*/
+}
 
 void HotStuffBase::propose_handler(MsgPropose &&msg, const Net::conn_t &conn) {
     const PeerId &peer = conn->get_peer_id();
@@ -405,8 +405,8 @@ HotStuffBase::HotStuffBase(uint32_t blk_size,
         part_delivery_time_max(0)
 {
     /* register the handlers for msg from replicas */
-    //_streamer.reg_handler(salticidae::generic_bind(&HotStuffBase::cmd_handler, this, _1, _2));
-    //_streamer.reg_handler(salticidae::generic_bind(&HotStuffBase::resp_cmd_handler, this, _1, _2));
+    _streamer.reg_handler(salticidae::generic_bind(&HotStuffBase::cmd_handler, this, _1, _2));
+    _streamer.reg_handler(salticidae::generic_bind(&HotStuffBase::resp_cmd_handler, this, _1, _2));
     pn.reg_handler(salticidae::generic_bind(&HotStuffBase::propose_handler, this, _1, _2));
     pn.reg_handler(salticidae::generic_bind(&HotStuffBase::vote_handler, this, _1, _2));
     pn.reg_handler(salticidae::generic_bind(&HotStuffBase::req_blk_handler, this, _1, _2));
@@ -434,10 +434,10 @@ void HotStuffBase::do_broadcast_proposal(const Proposal &prop) {
     //    pn.send_msg(prop_msg, replica);
 }
 
-/*void HotStuffBase::do_resp_cmd(const uint256_t cmd) {
+void HotStuffBase::do_resp_cmd(const uint256_t cmd) {
     ReplicaID proposer = pmaker->get_proposer();
     _streamer.send_msg(MsgRespSreamCmd(cmd), get_config().get_peer_id(proposer));
-}*/
+}
 
 void HotStuffBase::do_vote(ReplicaID last_proposer, const Vote &vote) {
     pmaker->beat_resp(last_proposer)
@@ -501,7 +501,7 @@ void HotStuffBase::start(
             _streamer.set_peer_addr(stream_peer, stream_addr);
             _streamer.conn_peer(stream_peer);
 
-            //cmds_peers[stream_peer] = 0;
+            cmds_peers[stream_peer] = 0;
         }
     }
 
@@ -529,6 +529,9 @@ void HotStuffBase::start(
 
             if (proposer != get_id()) continue;
 
+            // Streaming of cmds
+            _streamer.multicast_msg(MsgCmd(cmd_hash), stream_peers);
+
             cmd_pending_buffer.push(cmd_hash);
             if (cmd_pending_buffer.size() >= blk_size) {
                 std::vector<uint256_t> cmds;
@@ -543,8 +546,7 @@ void HotStuffBase::start(
                     }
                 });
 
-                /* Streaming of cmds
-                _streamer.multicast_msg(MsgCmd(cmd_hash), stream_peers);
+                /* 
 
                 // Proposal
                 pmaker->beat().then([this, cmd_hash](ReplicaID proposer) {

@@ -79,7 +79,7 @@ struct MsgRespBlock {
     void postponed_parse(HotStuffCore *hsc);
 };
 
-/*struct MsgCmd {
+struct MsgCmd {
     static const opcode_t opcode = 0x4;
     DataStream serialized;
     uint256_t cmd;
@@ -95,7 +95,7 @@ struct MsgRespSreamCmd {
     
     MsgRespSreamCmd(const uint256_t &cmd);
     MsgRespSreamCmd(DataStream &&s);
-};*/
+};
 
 using promise::promise_t;
 
@@ -164,7 +164,7 @@ class HotStuffBase: public HotStuffCore {
     std::vector<PeerId> peers;
     std::vector<PeerId> stream_peers;
     std::map<PeerId, PeerId> _convert_peers;
-    //std::map<PeerId, int> cmds_peers;
+    std::map<PeerId, int> cmds_peers;
 
     private:
     /** whether libevent handle is owned by itself */
@@ -205,10 +205,10 @@ class HotStuffBase: public HotStuffCore {
     void on_fetch_blk(const block_t &blk);
     bool on_deliver_blk(const block_t &blk);
 
-    /** deliver streaming message: <cmd>
+    /** deliver streaming message: <cmd> */
     inline void cmd_handler(MsgCmd &&, const Net::conn_t &);
-    /** deliver streaming message: <ack cmd>
-    inline void resp_cmd_handler(MsgRespSreamCmd &&, const Net::conn_t &);*/
+    /** deliver streaming message: <ack cmd> */
+    inline void resp_cmd_handler(MsgRespSreamCmd &&, const Net::conn_t &);
     /** deliver consensus message: <propose> */
     inline void propose_handler(MsgPropose &&, const Net::conn_t &);
     /** deliver consensus message: <vote> */
@@ -222,7 +222,7 @@ class HotStuffBase: public HotStuffCore {
 
     void do_broadcast_proposal(const Proposal &) override;
     void do_vote(ReplicaID, const Vote &) override;
-    //void do_resp_cmd(const uint256_t cmd) override;
+    void do_resp_cmd(const uint256_t cmd) override;
     void do_decide(Finality &&) override;
     void do_consensus(const block_t &blk) override;
 

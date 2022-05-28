@@ -28,7 +28,7 @@
 
 namespace hotstuff {
 
-//std::vector<uint256_t> HotStuffCore::cmds = std::vector<uint256_t> {};
+std::vector<uint256_t> HotStuffCore::cmds = std::vector<uint256_t> {};
 
 /* The core logic of HotStuff, is fairly simple :). */
 /*** begin HotStuff protocol logic ***/
@@ -225,11 +225,11 @@ block_t HotStuffCore::on_propose(const std::vector<uint256_t> &cmds,
     return bnew;
 }
 
-/*void HotStuffCore::on_receive_cmd(const uint256_t &cmd) {
+void HotStuffCore::on_receive_cmd(const uint256_t &cmd) {
     LOG_INFO("got %s", cmd);
     cmds.push_back(cmd);
     do_resp_cmd(cmd);
-}*/
+}
 
 void HotStuffCore::on_receive_proposal(const Proposal &prop) {
     LOG_PROTO("got %s", std::string(prop).c_str());

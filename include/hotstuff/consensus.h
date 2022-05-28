@@ -69,8 +69,8 @@ class HotStuffCore {
 
     public:
     BoxObj<EntityStorage> storage;
-    /* Vector of received transactions
-    static std::vector<uint256_t> cmds;*/
+    // Vector of received transactions
+    static std::vector<uint256_t> cmds;
 
     HotStuffCore(ReplicaID id, privkey_bt &&priv_key);
     virtual ~HotStuffCore() {
@@ -93,8 +93,8 @@ class HotStuffCore {
      * @return true if valid */
     bool on_deliver_blk(const block_t &blk);
 
-    /* Call upon the delivery of a cmd.
-    void on_receive_cmd(const uint256_t &cmd);*/
+    /** Call upon the delivery of a cmd. */
+    void on_receive_cmd(const uint256_t &cmd);
 
     /** Call upon the delivery of a proposal message.
      * The block mentioned in the message should be already delivered. */
@@ -129,8 +129,8 @@ class HotStuffCore {
      * itself. */
     virtual void do_broadcast_proposal(const Proposal &prop) = 0;
     /** Called by HotStuffCore upon the beacon message that a replica has send
-     * to acknowledge how many transactions it has received in the background.
-    virtual void do_resp_cmd(const uint256_t cmd) = 0;*/
+     * to acknowledge how many transactions it has received in the background.*/
+    virtual void do_resp_cmd(const uint256_t cmd) = 0;
     /** Called upon sending out a new vote to the next proposer.  The user
      * should send the vote message to a *good* proposer to have good liveness,
      * while safety is always guaranteed by HotStuffCore. */
