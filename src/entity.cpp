@@ -68,7 +68,7 @@ promise_t Block::verify(const HotStuffCore *hsc, VeriPool &vpool) const {
     return qc->verify(hsc->get_config(), vpool);
 }
 
-/* INTBLOCK
+// INTBLOCK
 void IntBlock::serialize(DataStream &s) const {
     s << htole((uint32_t)parent_hashes.size());
     for (const auto &hash: parent_hashes)
@@ -107,5 +107,5 @@ promise_t IntBlock::verify(const HotStuffCore *hsc, VeriPool &vpool) const {
     if (qc->get_obj_hash() == hsc->get_genesis()->get_hash())
         return promise_t([](promise_t &pm) { pm.resolve(true); });
     return qc->verify(hsc->get_config(), vpool);
-}*/
+}
 }

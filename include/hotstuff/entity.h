@@ -88,11 +88,11 @@ class ReplicaConfig {
 };
 
 class Block;
-//class IntBlock;
+class IntBlock;
 class HotStuffCore;
 
 using block_t = salticidae::ArcObj<Block>;
-//using iblock_t = salticidae::ArcObj<IntBlock>;
+using iblock_t = salticidae::ArcObj<IntBlock>;
 
 class Command: public Serializable {
     friend HotStuffCore;
@@ -215,7 +215,7 @@ class Block {
     }
 };
 
-/*class IntBlock {
+class IntBlock {
     friend HotStuffCore;
     std::vector<uint256_t> parent_hashes;
     int n_cmds;
@@ -310,7 +310,7 @@ class Block {
           << "qc_ref=" << (qc_ref ? get_hex10(qc_ref->get_hash()) : "null") << ">";
         return s;
     }
-};*/
+};
 
 struct BlockHeightCmp {
     bool operator()(const block_t &a, const block_t &b) const {
