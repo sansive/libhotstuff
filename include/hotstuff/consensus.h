@@ -69,8 +69,8 @@ class HotStuffCore {
 
     public:
     BoxObj<EntityStorage> storage;
-    // Vector of received transactions
-    static std::vector<uint256_t> cmds;
+    /* Vector of received transactions
+    static std::vector<uint256_t> cmds;*/
 
     HotStuffCore(ReplicaID id, privkey_bt &&priv_key);
     virtual ~HotStuffCore() {
@@ -93,8 +93,8 @@ class HotStuffCore {
      * @return true if valid */
     bool on_deliver_blk(const block_t &blk);
 
-    /** Call upon the delivery of a cmd.*/
-    void on_receive_cmd(const uint256_t &cmd);
+    /* Call upon the delivery of a cmd.
+    void on_receive_cmd(const uint256_t &cmd);*/
 
     /** Call upon the delivery of a proposal message.
      * The block mentioned in the message should be already delivered. */
@@ -107,9 +107,12 @@ class HotStuffCore {
     /** Call to submit new commands to be decided (executed). "Parents" must
      * contain at least one block, and the first block is the actual parent,
      * while the others are uncles/aunts */
-    block_t on_propose(const int n_cmds,
+    /*block_t on_propose(const int n_cmds,
                             const std::vector<block_t> &parents,
-                            bytearray_t &&extra = bytearray_t());
+                            bytearray_t &&extra = bytearray_t());*/
+    block_t on_propose(const std::vector<uint256_t> &cmds,
+                            const std::vector<block_t> &parents,
+                            bytearray_t &&extra = bytearray_t());                      
 
     /* Functions required to construct concrete instances for abstract classes.
      * */
@@ -126,8 +129,8 @@ class HotStuffCore {
      * itself. */
     virtual void do_broadcast_proposal(const Proposal &prop) = 0;
     /** Called by HotStuffCore upon the beacon message that a replica has send
-     * to acknowledge how many transactions it has received in the background. */
-    virtual void do_resp_cmd(const uint256_t cmd) = 0;
+     * to acknowledge how many transactions it has received in the background.
+    virtual void do_resp_cmd(const uint256_t cmd) = 0;*/
     /** Called upon sending out a new vote to the next proposer.  The user
      * should send the vote message to a *good* proposer to have good liveness,
      * while safety is always guaranteed by HotStuffCore. */
@@ -178,15 +181,23 @@ class HotStuffCore {
 /** Abstraction for proposal messages. */
 struct Proposal: public Serializable {
     ReplicaID proposer;
-    /** IntBlock being proposed */
-    iblock_t blk;
+    /** IntBlock being proposed
+    iblock_t blk;*/
+    /** block being proposed*/
+    block_t blk;
     /** handle of the core object to allow polymorphism. The user should use
      * a pointer to the object of the class derived from HotStuffCore */
     HotStuffCore *hsc;
 
     Proposal(): blk(nullptr), hsc(nullptr) {}
-    Proposal(ReplicaID proposer,
+    /*Proposal(ReplicaID proposer,
             const iblock_t &blk,
+            HotStuffCore *hsc):
+        proposer(proposer),
+        blk(blk), hsc(hsc) {}*/
+    
+    Proposal(ReplicaID proposer,
+            const block_t &blk,
             HotStuffCore *hsc):
         proposer(proposer),
         blk(blk), hsc(hsc) {}
@@ -202,6 +213,12 @@ struct Proposal: public Serializable {
         IntBlock _blk;
         _blk.unserialize(s, hsc);
         blk = hsc->storage->add_blk(std::move(_blk), hsc->get_config());*/
+
+        assert(hsc != nullptr);
+        s >> proposer;
+        Block _blk;
+        _blk.unserialize(s, hsc);
+        blk = hsc->storage->add_blk(std::move(_blk), hsc->get_config());
     }
 
     operator std::string () const {

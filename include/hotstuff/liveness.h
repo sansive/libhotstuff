@@ -83,7 +83,9 @@ class PMHighTail: public virtual PaceMaker {
 
     void reg_proposal() {
         hsc->async_wait_proposal().then([this](const Proposal &prop) {
-            iblock_t prop_block = prop.blk;
+            hqc_tail = prop.blk;
+
+            /*iblock_t prop_block = prop.blk;
             int n_cmds = prop_block->get_n_cmds();
 
             std::vector<uint256_t> block_cmds;
@@ -102,14 +104,14 @@ class PMHighTail: public virtual PaceMaker {
                 );
 
 
-            hqc_tail = bnew;
+            hqc_tail = bnew;*/
             reg_proposal();
         });
     }
 
     void reg_receive_proposal() {
         hsc->async_wait_receive_proposal().then([this](const Proposal &prop) {
-            iblock_t prop_block = prop.blk;
+            /*iblock_t prop_block = prop.blk;
             int n_cmds = prop_block->get_n_cmds();
 
             std::vector<uint256_t> block_cmds;
@@ -125,9 +127,10 @@ class PMHighTail: public virtual PaceMaker {
                     prop_block->get_height(),
                     std::move(prop_block->get_qc_ref()),
                     nullptr
-                );
+                );*/
 
             const auto &hqc = hsc->get_hqc();
+            const auto &blk = prop.blk;
             if (check_ancestry(hqc, blk) && blk->get_height() > hqc_tail->get_height())
                 hqc_tail = blk;
             reg_receive_proposal();
@@ -194,7 +197,9 @@ class PMWaitQC: public virtual PaceMaker {
         (pm_wait_propose = hsc->async_wait_proposal()).then(
                 [this](const Proposal &prop) {
 
-            iblock_t prop_block = prop.blk;
+            last_proposed = prop.blk;
+
+            /*iblock_t prop_block = prop.blk;
             int n_cmds = prop_block->get_n_cmds();
 
             std::vector<uint256_t> block_cmds;
@@ -210,7 +215,7 @@ class PMWaitQC: public virtual PaceMaker {
                     prop_block->get_height(),
                     std::move(prop_block->get_qc_ref()),
                     nullptr
-                );
+                );*/
 
             locked = false;
             schedule_next();
@@ -304,7 +309,9 @@ class PMRoundRobinProposer: virtual public PaceMaker {
     void reg_proposal() {
         hsc->async_wait_proposal().then([this](const Proposal &prop) {
             auto &pblk = prop_blk[hsc->get_id()];
-            if (!pblk) {
+            if (!pblk) pblk = prop.blk;
+
+            /*if (!pblk) {
                 iblock_t prop_block = prop.blk;
                 int n_cmds = prop_block->get_n_cmds();
 
@@ -322,7 +329,7 @@ class PMRoundRobinProposer: virtual public PaceMaker {
                         std::move(prop_block->get_qc_ref()),
                         nullptr
                     );
-            }
+            }*/
             if (rotating) reg_proposal();
         });
     }
@@ -330,7 +337,9 @@ class PMRoundRobinProposer: virtual public PaceMaker {
     void reg_receive_proposal() {
         hsc->async_wait_receive_proposal().then([this](const Proposal &prop) {
             auto &pblk = prop_blk[prop.proposer];
-            if (!pblk) {
+            if (!pblk) pblk = prop.blk;
+
+            /*if (!pblk) {
                 iblock_t prop_block = prop.blk;
                 int n_cmds = prop_block->get_n_cmds();
 
@@ -348,7 +357,7 @@ class PMRoundRobinProposer: virtual public PaceMaker {
                         std::move(prop_block->get_qc_ref()),
                         nullptr
                     );
-            }
+            }*/
             if (rotating) reg_receive_proposal();
         });
     }
@@ -373,7 +382,9 @@ class PMRoundRobinProposer: virtual public PaceMaker {
         (pm_wait_propose = hsc->async_wait_proposal()).then(
                 [this](const Proposal &prop) {
 
-            iblock_t prop_block = prop.blk;
+            last_proposed = prop.blk;
+
+            /*iblock_t prop_block = prop.blk;
             int n_cmds = prop_block->get_n_cmds();
 
             std::vector<uint256_t> block_cmds;
@@ -389,7 +400,7 @@ class PMRoundRobinProposer: virtual public PaceMaker {
                     prop_block->get_height(),
                     std::move(prop_block->get_qc_ref()),
                     nullptr
-                );
+                );*/
                 
             locked = false;
             proposer_schedule_next();
@@ -397,8 +408,11 @@ class PMRoundRobinProposer: virtual public PaceMaker {
         });
     }
 
-    void do_new_consensus(int x, const int &n_cmds) {
-        auto blk = hsc->on_propose(n_cmds, get_parents(), bytearray_t());
+    /*void do_new_consensus(int x, const int &n_cmds) {
+        auto blk = hsc->on_propose(n_cmds, get_parents(), bytearray_t());*/
+
+    void do_new_consensus(int x, const std::vector<uint256_t> &cmds) {
+        auto blk = hsc->on_propose(cmds, get_parents(), bytearray_t());
         pm_qc_manual.reject();
         (pm_qc_manual = hsc->async_qc_finish(blk))
             .then([this, x]() {
@@ -408,15 +422,17 @@ class PMRoundRobinProposer: virtual public PaceMaker {
 #else
                 if (x >= 3) return;
 #endif
-                int n = 0;
-                do_new_consensus(x + 1, n);
+                do_new_consensus(x + 1, std::vector<uint256_t>{});
+                /*int n = 0;
+                do_new_consensus(x + 1, n);*/
             });
     }
 
     void on_exp_timeout(TimerEvent &) {
         if (proposer == hsc->get_id()) {
-            int n = 0;
-            do_new_consensus(0, n);
+            do_new_consensus(0, std::vector<uint256_t>{});
+            /*int n = 0;
+            do_new_consensus(0, n);*/
         }
         timer = TimerEvent(ec, [this](TimerEvent &){ rotate(); });
         timer.add(prop_delay);
@@ -461,7 +477,8 @@ class PMRoundRobinProposer: virtual public PaceMaker {
                 std::vector<uint256_t> cmds;
                 for (auto &p: pending)
                     cmds.push_back(p.first);
-                do_new_consensus(0, cmds.size());
+                //do_new_consensus(0, cmds.size());
+                do_new_consensus(0, cmds);
             });
         }
     }

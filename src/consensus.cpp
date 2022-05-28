@@ -28,7 +28,7 @@
 
 namespace hotstuff {
 
-std::vector<uint256_t> HotStuffCore::cmds = std::vector<uint256_t> {};
+//std::vector<uint256_t> HotStuffCore::cmds = std::vector<uint256_t> {};
 
 /* The core logic of HotStuff, is fairly simple :). */
 /*** begin HotStuff protocol logic ***/
@@ -77,8 +77,8 @@ bool HotStuffCore::on_deliver_blk(const block_t &blk) {
         blk->qc_ref = std::move(_blk);
     } // otherwise blk->qc_ref remains null
 
-    /*for (auto pblk: blk->parents) tails.erase(pblk);
-    tails.insert(blk);*/
+    for (auto pblk: blk->parents) tails.erase(pblk);
+    tails.insert(blk);
 
     blk->delivered = true;
     LOG_DEBUG("deliver %s", std::string(*blk).c_str());
@@ -153,15 +153,20 @@ void HotStuffCore::update(const block_t &nblk) {
     b_exec = blk;
 }
 
-block_t HotStuffCore::on_propose(const int n_cmds,
+/*block_t HotStuffCore::on_propose(const int n_cmds,
+                            const std::vector<block_t> &parents,
+                            bytearray_t &&extra) {*/
+
+block_t HotStuffCore::on_propose(const std::vector<uint256_t> &cmds,
                             const std::vector<block_t> &parents,
                             bytearray_t &&extra) {
     if (parents.empty())
         throw std::runtime_error("empty parents");
 
     for (const auto &_: parents) tails.erase(_);
+    /* create the new block */
 
-    // Create IntBlock
+    /* Create IntBlock
     iblock_t prop_block = new IntBlock(parents, n_cmds,
             hqc.second->clone(), std::move(extra),
             parents[0]->height + 1,
@@ -177,25 +182,38 @@ block_t HotStuffCore::on_propose(const int n_cmds,
         cmds.erase(cmds.begin());
     }
 
-    // Create Block
     block_t bnew = storage->add_blk(
         new Block(parents, block_cmds,
             hqc.second->clone(), std::move(extra),
             parents[0]->height + 1,
             hqc.first,
             nullptr
-        ));
+        ));*/
+
+    block_t bnew = storage->add_blk(
+        new Block(parents, cmds,
+            hqc.second->clone(), std::move(extra),
+            parents[0]->height + 1,
+            hqc.first,
+            nullptr
+    ));
 
     const uint256_t bnew_hash = bnew->get_hash();
     bnew->self_qc = create_quorum_cert(bnew_hash);
     on_deliver_blk(bnew);
     update(bnew);
 
-    Proposal prop(id, prop_block, nullptr);
+    /*Proposal prop(id, prop_block, nullptr);
     LOG_PROTO("propose %s", std::string(*prop_block).c_str());
     
     if (prop_block->height <= vheight)
+        throw std::runtime_error("new block should be higher than vheight");*/
+    
+    Proposal prop(id, bnew, nullptr);
+    LOG_PROTO("propose %s", std::string(*bnew).c_str());
+    if (bnew->height <= vheight)
         throw std::runtime_error("new block should be higher than vheight");
+
     
     /* self-receive the proposal (no need to send it through the network) */
     on_receive_proposal(prop);
@@ -207,17 +225,18 @@ block_t HotStuffCore::on_propose(const int n_cmds,
     return bnew;
 }
 
-void HotStuffCore::on_receive_cmd(const uint256_t &cmd) {
+/*void HotStuffCore::on_receive_cmd(const uint256_t &cmd) {
     LOG_INFO("got %s", cmd);
     cmds.push_back(cmd);
     do_resp_cmd(cmd);
-}
+}*/
 
 void HotStuffCore::on_receive_proposal(const Proposal &prop) {
     LOG_PROTO("got %s", std::string(prop).c_str());
     bool self_prop = prop.proposer == get_id();
+    block_t bnew = prop.blk;
 
-    iblock_t prop_block = prop.blk;
+    /*iblock_t prop_block = prop.blk;
     int n_cmds = prop_block->get_n_cmds();
 
     std::vector<uint256_t> block_cmds;
@@ -235,7 +254,7 @@ void HotStuffCore::on_receive_proposal(const Proposal &prop) {
             prop_block->get_height(),
             std::move(prop_block->get_qc_ref()),
             nullptr
-        ));
+        ));*/
 
     if (!self_prop)
     {
