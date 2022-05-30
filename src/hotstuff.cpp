@@ -224,6 +224,8 @@ void HotStuffBase::cmd_handler(MsgCmd &&msg, const Net::conn_t &conn) {
     const PeerId &peer = conn->get_peer_id();
     if (peer.is_null()) return;
 
+    cmds_peers[peer] = cmds_peers[peer] + 1;
+
     auto &cmd = msg.cmd;
     on_receive_cmd(cmd);
 }
@@ -527,10 +529,24 @@ void HotStuffBase::start(
             else
                 e.second(Finality(id, 0, 0, 0, cmd_hash, uint256_t()));
 
-            if (proposer != get_id()) continue;
 
             // Streaming of cmds
+            save_cmd(cmd_hash);
             _streamer.multicast_msg(MsgCmd(cmd_hash), stream_peers);
+
+            if (proposer != get_id()) continue;
+
+            int n_cmds = cmds_peers[stream_peers[0]];
+            for (auto stream_peer: stream_peers) {
+                if (cmds_peers[stream_peer] < n_cmds)
+                    n_cmds = cmds_peers[stream_peer];
+            }
+
+            on_propose_iblock(n_cmds, pmaker->get_parents());
+
+            for (auto stream_peer: stream_peers) {
+                cmds_peers[stream_peer] = cmds_peers[stream_peer] - n_cmds;
+            }
 
             cmd_pending_buffer.push(cmd_hash);
             if (cmd_pending_buffer.size() >= blk_size) {

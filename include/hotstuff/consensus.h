@@ -30,6 +30,7 @@
 namespace hotstuff {
 
 struct Proposal;
+struct IntProposal;
 struct Vote;
 struct Finality;
 
@@ -63,6 +64,7 @@ class HotStuffCore {
     void on_qc_finish(const block_t &blk);
     void on_propose_(const Proposal &prop);
     void on_receive_proposal_(const Proposal &prop);
+    void on_receive_iblock_proposal_(const IntProposal &prop);
 
     protected:
     ReplicaID id;                  /**< identity of the replica itself */
@@ -70,7 +72,7 @@ class HotStuffCore {
     public:
     BoxObj<EntityStorage> storage;
     // Vector of received transactions
-    static std::vector<uint256_t> cmds;
+    static std::vector<uint256_t> saved_cmds;
 
     HotStuffCore(ReplicaID id, privkey_bt &&priv_key);
     virtual ~HotStuffCore() {
@@ -93,12 +95,16 @@ class HotStuffCore {
      * @return true if valid */
     bool on_deliver_blk(const block_t &blk);
 
+    void save_cmd(const uint256_t &cmd);
+
     /** Call upon the delivery of a cmd. */
     void on_receive_cmd(const uint256_t &cmd);
 
     /** Call upon the delivery of a proposal message.
      * The block mentioned in the message should be already delivered. */
     void on_receive_proposal(const Proposal &prop);
+
+    void on_receive_iblock_proposal(const IntProposal &prop);
 
     /** Call upon the delivery of a vote message.
      * The block mentioned in the message should be already delivered. */
@@ -107,12 +113,13 @@ class HotStuffCore {
     /** Call to submit new commands to be decided (executed). "Parents" must
      * contain at least one block, and the first block is the actual parent,
      * while the others are uncles/aunts */
-    /*block_t on_propose(const int n_cmds,
-                            const std::vector<block_t> &parents,
-                            bytearray_t &&extra = bytearray_t());*/
     block_t on_propose(const std::vector<uint256_t> &cmds,
                             const std::vector<block_t> &parents,
-                            bytearray_t &&extra = bytearray_t());                      
+                            bytearray_t &&extra = bytearray_t());
+
+    block_t on_propose_iblock(const int n_cmds,
+                            const std::vector<block_t> &parents,
+                            bytearray_t &&extra = bytearray_t());                 
 
     /* Functions required to construct concrete instances for abstract classes.
      * */
@@ -219,6 +226,44 @@ struct Proposal: public Serializable {
         Block _blk;
         _blk.unserialize(s, hsc);
         blk = hsc->storage->add_blk(std::move(_blk), hsc->get_config());
+    }
+
+    operator std::string () const {
+        DataStream s;
+        s << "<proposal "
+          << "rid=" << std::to_string(proposer) << " "
+          << "blk=" << get_hex10(blk->get_hash()) << ">";
+        return s;
+    }
+};
+
+struct IntProposal: public Serializable {
+    ReplicaID proposer;
+    /** IntBlock being proposed*/
+    iblock_t blk;
+    /** handle of the core object to allow polymorphism. The user should use
+     * a pointer to the object of the class derived from HotStuffCore */
+    HotStuffCore *hsc;
+
+    IntProposal(): blk(nullptr), hsc(nullptr) {}
+    
+    IntProposal(ReplicaID proposer,
+            const iblock_t &blk,
+            HotStuffCore *hsc):
+        proposer(proposer),
+        blk(blk), hsc(hsc) {}
+
+    void serialize(DataStream &s) const override {
+        s << proposer
+          << *blk;
+    }
+
+    void unserialize(DataStream &s) override {
+        assert(hsc != nullptr);
+        s >> proposer;
+        IntBlock _blk;
+        _blk.unserialize(s, hsc);
+        //blk = hsc->storage->add_blk(std::move(_blk), hsc->get_config());
     }
 
     operator std::string () const {
